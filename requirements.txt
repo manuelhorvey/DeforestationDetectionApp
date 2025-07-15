@@ -1,0 +1,8 @@
+# %%writefile /content/drive/MyDrive/DeforestationApp/requirements.txt
+torch
+torchvision
+timm
+rasterio
+numpy
+pillow
+gradio
