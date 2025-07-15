@@ -53,8 +53,4 @@ This application uses a transformer-based ChangeFormer model to detect deforesta
 
 ## Credits
 - **Author**: Emmanuel Amey, Sammuel Young Appiah, Asare Prince Owusu, Yaaya Pearl Apenu.
-- **Guided by**: [Insert supervisor name, if applicable].
 - **References**: Inspired by Alshehri et al. (2024), IEEE Geoscience and Remote Sensing Letters.
-
-## License
-[Specify license, e.g., MIT or Apache 2.0, or state "For academic use only" if restricted.]
