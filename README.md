@@ -1,6 +1,6 @@
 # Deforestation Detection App
 
-This application uses a transformer-based ChangeFormer model to detect deforestation in the Brazilian Amazon using Sentinel-2 satellite imagery. Developed as a final year project, it processes 4-band (RGB + NIR) .tif images from 2020 and 2021 to generate binary change masks and overlay predictions, achieving an F1-score of 0.9986 and IoU of 0.9972 on validation data.
+This application uses a transformer-based ChangeFormer model to detect deforestation in the Brazilian Amazon using Sentinel-2 satellite imagery. Developed as a final year project, it processes 4-band (RGB + NIR) .tif images from 2020 and 2021 to generate binary change masks and overlay predictions, achieving an F1-score of 0.9886 and IoU of 0.9572 on validation data.
 
 ## Overview
 - **Model**: Custom ChangeFormer with a VisionTransformer encoder, FeatureDifferenceModule, and DeconvDecoder.
@@ -34,7 +34,7 @@ This application uses a transformer-based ChangeFormer model to detect deforesta
    - Access the interface at `http://localhost:7860`.
 
 4. **Deployed Version**:
-   - Check the live app at [Insert Hugging Face Space URL] (once deployed).
+   - Check the live app at ***** .
 
 ## Usage
 - **Input**: Upload two .tif files (e.g., 256x256 patches) containing RGB and NIR bands.
