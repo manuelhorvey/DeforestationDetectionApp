@@ -2,6 +2,9 @@ import os
 import io
 import json
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from timm.models.vision_transformer import VisionTransformer
 import numpy as np
 from torchvision import transforms
 from PIL import Image
@@ -9,13 +12,13 @@ import rasterio
 from rasterio.features import shapes
 from shapely.geometry import shape, mapping
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import gradio as gr
 import folium
 from folium.plugins import HeatMap
 import logging
 import time
 import uuid
-import matplotlib.patches as mpatches
 import urllib.request
 import urllib.error
 
@@ -25,9 +28,9 @@ import urllib.error
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# _________________________
-# Initialize the model
-# _________________________
+# ---------------------------
+# Model Definition
+# ---------------------------
 class FeatureDifferenceModule(nn.Module):
     """Computes feature differences using absolute difference and Conv2D."""
     def __init__(self, in_channels):
@@ -88,16 +91,11 @@ class ChangeFormer(nn.Module):
         out = F.interpolate(out, size=(self.img_size, self.img_size), mode='bilinear', align_corners=False)
         return out
 
+# Model Initialization
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = ChangeFormer(num_classes=1).to(device)
-print("ChangeFormer Model Initialized!")
-
-# ---------------------------
-# Load Model
-# ---------------------------
 logger.info(f"Using device: {device}")
 try:
-    model = ChangeFormer(num_classes=1).to(device)
     model_path = "/content/drive/MyDrive/newmodel/best_model.pth"
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found at {model_path}")
@@ -139,7 +137,7 @@ def generate_unique_filename(base_name, extension):
     return f"{base_name}_{timestamp}_{unique_id}.{extension}"
 
 # ---------------------------
-# Legend-enhanced Visualization Functions
+# Visualization Functions
 # ---------------------------
 def add_overlay_legend(overlay_img, original_shape):
     try:
@@ -350,8 +348,7 @@ def compute_stats(mask, path2):
             except Exception:
                 resolution = 0
             changed_area = changed_pixels * resolution if resolution > 0 else "N/A (No georeferencing)"
-            # Extract bounding box coordinates and CRS
-            bounds = src.bounds  # Returns (left, bottom, right, top)
+            bounds = src.bounds
             crs = src.crs.to_string() if src.crs else "N/A (No CRS)"
         return {
             "Changed Pixels": changed_pixels,
@@ -455,10 +452,10 @@ def predict_change(file1, file2, threshold, alpha, progress=gr.Progress()):
     logger.info("Starting predict_change")
     progress(0, desc="Checking inputs...")
     clear_cache()
-    default_output = (None, None, None, None, None, "", {}, None, None, None, None, None, None)
+    default_output = (None, None, None, None, None, None, "", {}, None, None, None, None, None, None)
     if file1 is None or file2 is None:
         logger.warning("Missing input files")
-        return (*default_output[:5], "Please upload both images.", *default_output[6:])
+        return (*default_output[:6], "Please upload both images.", *default_output[7:])
     path1 = file1.name
     path2 = file2.name
     try:
@@ -474,7 +471,7 @@ def predict_change(file1, file2, threshold, alpha, progress=gr.Progress()):
             raise ValueError("Images must have the same dimensions.")
         original_shape = (height1, width1)
     except Exception as e:
-        return (*default_output[:5], f"Error: {str(e)}", *default_output[6:])
+        return (*default_output[:6], f"Error: {str(e)}", *default_output[7:])
     progress(0.3, desc="Predicting changes...")
     try:
         preds, full_size = predict_on_large_4band_tifs(path1, path2, threshold=threshold)
@@ -483,14 +480,15 @@ def predict_change(file1, file2, threshold, alpha, progress=gr.Progress()):
             logger.error(f"Stitched mask shape {mask.shape} does not match original shape {original_shape}")
             raise ValueError("Mask dimensions do not match input image dimensions.")
     except Exception as e:
-        return (*default_output[:5], f"Error: Prediction failed - {str(e)}", *default_output[6:])
+        return (*default_output[:6], f"Error: Prediction failed - {str(e)}", *default_output[7:])
     progress(0.6, desc="Generating visuals...")
     try:
-        rgb = normalize_rgb(path2)
-        if rgb.shape[:2] != original_shape:
-            logger.error(f"RGB image shape {rgb.shape[:2]} does not match original shape {original_shape}")
+        rgb1 = normalize_rgb(path1)
+        rgb2 = normalize_rgb(path2)
+        if rgb1.shape[:2] != original_shape or rgb2.shape[:2] != original_shape:
+            logger.error(f"RGB image shapes do not match original shape {original_shape}")
             raise ValueError("RGB image dimensions do not match input image dimensions.")
-        overlay = overlay_mask(rgb, mask, alpha=alpha)
+        overlay = overlay_mask(rgb2, mask, alpha=alpha)
         overlay_path = generate_unique_filename("overlay", "png")
         mask_png_path = generate_unique_filename("mask", "png")
         geotiff_path = export_geotiff(mask, path2)
@@ -502,10 +500,11 @@ def predict_change(file1, file2, threshold, alpha, progress=gr.Progress()):
         stats_plot = plot_stats(stats)
         comment = generate_comment(mask)
     except Exception as e:
-        return (*default_output[:5], f"Error: Visualization failed - {str(e)}", *default_output[6:])
+        return (*default_output[:6], f"Error: Visualization failed - {str(e)}", *default_output[7:])
     progress(1.0, desc="Complete!")
     return (
-        Image.fromarray((rgb * 255).astype(np.uint8)),
+        Image.fromarray((rgb1 * 255).astype(np.uint8)),
+        Image.fromarray((rgb2 * 255).astype(np.uint8)),
         Image.open(overlay_path),
         Image.open(mask_png_path),
         add_heatmap_legend(mask),
@@ -545,48 +544,105 @@ def validate_image_url(url):
 # Gradio Dashboard with Tabs
 # ---------------------------
 with gr.Blocks(title="Change Detection Dashboard", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("""
-    # Change Detection Dashboard
-    A powerful tool for analyzing land cover changes using satellite imagery.
-    """)
-
     with gr.Tab("Home"):
         gr.Markdown("""
-        ## Welcome to the Change Detection Dashboard
-        Discover insights into land cover transformations with our advanced change detection tool powered by deep learning. Upload satellite images to analyze changes over time, visualize results, and download detailed outputs.
-
-        ---
-
-        ### Key Features
-        - **Advanced Analysis**: Detect changes in satellite imagery with at least 4 bands (RGB+NIR) using a transformer-based model.
-        - **Comprehensive Visualizations**: View raw images, change overlays, binary masks, heatmaps, and interactive maps.
-        - **Downloadable Outputs**: Export results as GeoTIFF, GeoJSON, or PNG files with legends for clarity.
-        - **User-Friendly Interface**: Navigate through intuitive tabs for uploading, analyzing, and exploring results.
-
-        ---
-
-        ### How to Use
-        1. Go to the **Upload** tab to upload two GeoTIFF images (Year 1 and Year 2) with at least 4 bands.
-        2. Adjust the change threshold and overlay opacity for customized analysis.
-        3. View results in the **Analysis**, **Stats**, **Downloads**, and **Interactive Heatmap** tabs.
-        4. Download high-resolution outputs or explore the interactive heatmap for georeferenced insights.
-
-        ---
-
-        ### Get Started
-        Navigate to the **Upload** tab to begin analyzing your satellite imagery.
+        <h2 style="color: var(--color-primary-600); text-align:center;">Welcome to the Change Detection Dashboard</h2>
+        <p style="font-size:16px; color: var(--color-text-secondary); text-align:center; max-width:800px; margin:0 auto;">
+            Unlock powerful insights into environmental and urban transformations with our state-of-the-art change detection system.
+            Powered by deep learning, this dashboard enables precise analysis of satellite imagery to detect land cover changes over time.
+        </p>
         """)
+        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>Overview</h3>")
+        gr.Markdown("""
+        <p style="font-size:15px; color: var(--color-text-secondary); line-height:1.6;">
+            Change detection in remote sensing is crucial for monitoring environmental changes, urban development, disaster response, and more.
+            Our dashboard uses multispectral satellite data (RGB + NIR bands) to identify differences between two time periods with high accuracy.
+            <br><br>
+            Whether you're an environmental scientist, urban planner, or researcher, this tool provides actionable insights through visualizations, statistics, and geospatial exports.
+        </p>
+        """)
+        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>Key Features</h3>")
+        with gr.Row(variant="panel"):
+            for emoji, title, desc in [
+                ("📊", "Rich Visualizations", "Interactive heatmaps, overlays, binary masks, and statistical charts with legends."),
+                ("💾", "Geospatial Exports", "Download results as GeoTIFF, GeoJSON, PNG, with preserved georeferencing."),
+                ("🧭", "Intuitive Interface", "Tab-based navigation for seamless workflow from upload to analysis.")
+            ]:
+                with gr.Column(scale=1):
+                    gr.Markdown(f"""
+                    <div style="
+                        background-color: var(--color-background-secondary);
+                        border-radius:8px;
+                        padding:15px;
+                        height:100%;
+                        text-align:center;">
+                        <h4 style="color: var(--color-primary-600);">{emoji} {title}</h4>
+                        <p style="color: var(--color-text-secondary); font-size:14px;">{desc}</p>
+                    </div>
+                    """)
+        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>How It Works</h3>")
+        gr.Markdown("""
+        <p style="font-size:15px; color: var(--color-text-secondary); line-height:1.6;">
+            The dashboard processes two GeoTIFF images from different time periods:
+            <ul style="list-style-type:disc; margin-left:20px; font-size:14px;">
+                <li><strong>Input Validation:</strong> Ensures images have matching dimensions and at least 4 bands (RGB + NIR).</li>
+                <li><strong>Patch-Based Processing:</strong> Divides large images into 256x256 patches for efficient prediction.</li>
+                <li><strong>Model Inference:</strong> Uses ChangeFormer to compute feature differences and generate change masks.</li>
+                <li><strong>Output Generation:</strong> Stitches results, creates visualizations, computes stats, and prepares exports.</li>
+            </ul>
+            The model is optimized for performance on CPU/GPU and handles large-scale imagery effectively.
+        </p>
+        """)
+        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>How to Use</h3>")
+        with gr.Row(variant="panel"):
+            steps = [
+                ("1️⃣ Upload Images", "Select GeoTIFF files for Year 1 and Year 2 in the Upload tab."),
+                ("2️⃣ Configure Parameters", "Adjust threshold and opacity for customized detection."),
+                ("3️⃣ Run Analysis", "Click 'Run Change Detection' and explore results across tabs."),
+                ("4️⃣ Export & Explore", "Download files or interact with maps for deeper insights.")
+            ]
+            for step, desc in steps:
+                with gr.Column(scale=1):
+                    gr.Markdown(f"""
+                    <div style="
+                        background-color: var(--color-background-secondary);
+                        border-radius:8px;
+                        padding:15px;
+                        height:100%;
+                        text-align:center;">
+                        <h4 style="color: var(--color-primary-600);">{step}</h4>
+                        <p style="color: var(--color-text-secondary); font-size:14px;">{desc}</p>
+                    </div>
+                    """)
+        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>Example Outputs</h3>")
         with gr.Row():
-            # satellite_url = validate_image_url("https://placehold.co/300x200.png?text=Satellite+Imagery")
-            # detection_url = validate_image_url("https://placehold.co/300x200.png?text=Change+Detection")
+            satellite_url = validate_image_url("https://placehold.co/400x300/png?text=Satellite+Imagery+Example&font=roboto")
+            detection_url = validate_image_url("https://placehold.co/400x300/png?text=Change+Detection+Output&font=roboto")
             gr.Image(value=satellite_url if satellite_url else None,
                      label="Example Satellite Imagery",
-                     scale=1,
-                     placeholder="Image unavailable")
+                     interactive=False,
+                     show_download_button=False,
+                     height=300)
             gr.Image(value=detection_url if detection_url else None,
-                     label="Change Detection Output",
-                     scale=1,
-                     placeholder="Image unavailable")
+                     label="Example Change Detection Output",
+                     interactive=False,
+                     show_download_button=False,
+                     height=300)
+        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>Benefits</h3>")
+        gr.Markdown("""
+        <ul style="list-style-type:disc; margin-left:20px; font-size:14px; color: var(--color-text-secondary);">
+            <li><strong>Environmental Monitoring:</strong> Track deforestation, wetland loss, or climate impacts.</li>
+            <li><strong>Urban Planning:</strong> Detect infrastructure changes and urban sprawl.</li>
+            <li><strong>Disaster Management:</strong> Assess damage from floods, fires, or earthquakes.</li>
+            <li><strong>Agriculture:</strong> Monitor crop health and land use changes.</li>
+            <li><strong>Research & Policy:</strong> Generate data for scientific studies and informed decision-making.</li>
+        </ul>
+        """)
+        gr.Markdown("""
+        <hr style="border-top: 2px solid var(--color-primary-100); margin:30px 0;">
+        <h3 style="color: var(--color-primary-600); text-align:center;">Ready to Detect Changes?</h3>
+        <p style="font-size:16px; color: var(--color-text-secondary); text-align:center;">Switch to the <strong>Upload</strong> tab to start your analysis today.</p>
+        """)
 
     with gr.Tab("Upload"):
         gr.Markdown("Upload two GeoTIFF images with at least 4 bands (RGB+NIR) for analysis. Only the first 4 bands (Red, Green, Blue, Near-Infrared) will be used.")
@@ -605,12 +661,14 @@ with gr.Blocks(title="Change Detection Dashboard", theme=gr.themes.Soft()) as de
         gr.Markdown("### Visualization of Change Detection Results")
         gr.Markdown("Note: Overlay and mask images include legends on the right, which extend the image width. Zoom in or download for full clarity.")
         with gr.Row(equal_height=False):
-            out1 = gr.Image(label="Raw RGB (Year 2)", interactive=False, show_download_button=True, scale=1)
-            out2 = gr.Image(label="Overlay with Prediction", interactive=False, show_download_button=True, scale=1)
+            out_year1 = gr.Image(label="Raw RGB (Year 1)", interactive=False, show_download_button=True, scale=1)
+            out_year2 = gr.Image(label="Raw RGB (Year 2)", interactive=False, show_download_button=True, scale=1)
         with gr.Row(equal_height=False):
-            out3 = gr.Image(label="Binary Change Mask", interactive=False, show_download_button=True, scale=1)
-            out4 = gr.Image(label="Change Heatmap (static)", interactive=False, show_download_button=True, scale=1)
-        out5 = gr.Textbox(label="System Comment", interactive=False)
+            out_overlay = gr.Image(label="Overlay with Prediction", interactive=False, show_download_button=True, scale=1)
+            out_mask = gr.Image(label="Binary Change Mask", interactive=False, show_download_button=True, scale=1)
+        with gr.Row(equal_height=False):
+            out_heatmap = gr.Image(label="Change Heatmap (static)", interactive=False, show_download_button=True, scale=1)
+        out_comment = gr.Textbox(label="System Comment", interactive=False)
 
     with gr.Tab("Stats"):
         stats_out = gr.JSON(label="Change Statistics")
@@ -625,21 +683,10 @@ with gr.Blocks(title="Change Detection Dashboard", theme=gr.themes.Soft()) as de
     with gr.Tab("Interactive Heatmap"):
         heatmap_out = gr.HTML(label="Dynamic Change Intensity Heatmap")
 
-    with gr.Tab("About"):
-        gr.Markdown("""
-        ### Change Detection Dashboard
-        - Upload **two satellite .tif images** with at least 4 bands (RGB+NIR) in the Upload tab. Only the first 4 bands (Red, Green, Blue, Near-Infrared) will be used.
-        - Adjust parameters for customized analysis.
-        - View **analysis, statistics, heatmaps**, download results (including GeoTIFF & GeoJSON), and explore an **interactive map preview** in their respective tabs.
-        - Overlay and mask images include larger legends on the right, extending the image width to preserve original content. Zoom in or download images to view legends clearly.
-        - Use the **Clear Inputs** button to reset the input fields and clear previous results.
-        - Download images to view them at full resolution, as the interface may scale large images for display.
-        """)
-
     run_btn.click(
         fn=predict_change,
         inputs=[file1, file2, threshold, alpha],
-        outputs=[out1, out2, out3, out4, out5, status, stats_out, stats_plot, dl_overlay, dl_mask, dl_geotiff, dl_geojson, heatmap_out]
+        outputs=[out_year1, out_year2, out_overlay, out_mask, out_heatmap, out_comment, status, stats_out, stats_plot, dl_overlay, dl_mask, dl_geotiff, dl_geojson, heatmap_out]
     )
     clear_btn.click(
         fn=clear_inputs,
