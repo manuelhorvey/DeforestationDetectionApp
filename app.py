@@ -96,7 +96,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = ChangeFormer(num_classes=1).to(device)
 logger.info(f"Using device: {device}")
 try:
-    model_path = "/content/drive/MyDrive/newmodel/best_model.pth"
+    model_path = "/content/drive/MyDrive/App/models/best_model.pth"
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found at {model_path}")
     model.load_state_dict(torch.load(model_path, map_location=device))
@@ -543,145 +543,409 @@ def validate_image_url(url):
 # ---------------------------
 # Gradio Dashboard with Tabs
 # ---------------------------
-with gr.Blocks(title="Change Detection Dashboard", theme=gr.themes.Soft()) as demo:
+custom_theme = gr.themes.Default(
+    primary_hue=gr.themes.colors.indigo,  # Switched to indigo for a modern, professional tone
+    secondary_hue=gr.themes.colors.cyan,  # Cyan for a fresh, vibrant secondary color
+    neutral_hue=gr.themes.colors.gray,    # Gray for neutral, versatile backgrounds
+    radius_size=gr.themes.sizes.radius_lg,  # Larger radius for softer, modern edges
+    text_size=gr.themes.sizes.text_lg,      # Slightly larger text for readability
+)
+
+with gr.Blocks(
+    title="Land Change Detection System",
+    theme=custom_theme,
+    css="""
+    :root {
+        --primary-600: #4f46e5; /* Vibrant indigo */
+        --primary-700: #4338ca; /* Darker indigo for hover */
+        --secondary-600: #06b6d4; /* Bright cyan */
+        --secondary-700: #0891b2; /* Darker cyan for hover */
+        --neutral-900: #111827; /* Deep gray for dark mode */
+        --neutral-800: #1f2937; /* Slightly lighter gray */
+        --neutral-300: #d1d5db; /* Light gray for accents */
+        --neutral-200: #e5e7eb; /* Very light gray for backgrounds */
+        --background-fill-primary: #f9fafb; /* Clean, off-white background */
+        --shadow-sm: 0 2px 4px rgba(0,0,0,0.08);
+        --shadow-md: 0 6px 16px rgba(0,0,0,0.12);
+        --font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        --font-family-heading: 'Poppins', sans-serif;
+    }
+
+    .gradio-container {
+        background: linear-gradient(135deg, var(--background-fill-primary), var(--neutral-200));
+        font-family: var(--font-family-base);
+        color: var(--neutral-800);
+        line-height: 1.65;
+        padding: 2.5rem;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    h1, h2, h3 {
+        font-family: var(--font-family-heading);
+        font-weight: 700; /* Bolder headings for emphasis */
+        color: var(--primary-700);
+        margin: 1.5rem 0 0.75rem;
+        line-height: 1.3;
+    }
+
+    h1 { font-size: 2.25rem; }
+    h2 { font-size: 1.75rem; }
+    h3 { font-size: 1.25rem; }
+
+    p, li {
+        font-size: 1.05rem;
+        color: var(--neutral-800);
+        line-height: 1.8;
+    }
+
+    .card {
+        background: var(--background-fill-primary); /* Ties card to theme */
+        border-radius: var(--radius_size);
+        padding: 1.75rem;
+        margin: 1rem 0;
+        box-shadow: var(--shadow-md);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+        transform: translateY(-0.3rem);
+        box-shadow: 0 10px 24px rgba(0,0,0,0.15);
+    }
+
+    .hero-section {
+    background: rgba(67, 56, 202, 0.65), /* Solid indigo overlay from --primary-700 */
+                url('https://images.unsplash.com/photo-1548287053-99cb39e360cd?q=80&w=1600&auto=format&fit=crop') no-repeat center;
+    background-size: cover;
+    border-radius: var(--radius_size);
+    padding: 5rem 2rem;
+    margin-bottom: 2.5rem;
+    text-align: center;
+    color: var(--neutral-200); /* Light gray for contrast */
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); /* Subtle shadow for legibility */
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(67, 56, 202, 0.25); /* Lighter indigo overlay for depth */
+    z-index: 1;
+}
+
+.hero-section > * {
+    position: relative;
+    z-index: 2;
+}
+
+@media (prefers-color-scheme: dark) {
+    .hero-section {
+        background: rgba(31, 41, 55, 0.7), /* Solid dark gray from --neutral-800 */
+                    url('https://images.unsplash.com/photo-1548287053-99cb39e360cd?q=80&w=1600&auto=format&fit=crop') no-repeat center;
+        background-size: cover;
+    }
+    .hero-section::before {
+        background: rgba(31, 41, 55, 0.3); /* Slightly lighter dark gray for dark mode */
+    }
+}
+
+    .primary-button {
+        background: linear-gradient(90deg, var(--primary-600), var(--secondary-600));
+        color: #ffffff;
+        border: none;
+        border-radius: 0.5rem;
+        padding: 0.9rem 2rem;
+        font-size: 1.05rem;
+        font-weight: 600;
+        font-family: var(--font-family-base);
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .primary-button:hover {
+        background: linear-gradient(90deg, var(--primary-700), var(--secondary-700));
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-md);
+    }
+
+    .secondary-button {
+        background: transparent;
+        color: var(--primary-700);
+        border: 2px solid var(--primary-600);
+        border-radius: 0.5rem;
+        padding: 0.85rem 2rem;
+        font-size: 1.05rem;
+        font-weight: 600;
+        font-family: var(--font-family-base);
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .secondary-button:hover {
+        background: var(--primary-600);
+        color: #ffffff;
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .rounded-image img {
+        border-radius: var(--radius_size);
+        border: 2px solid var(--neutral-300);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        max-width: 100%;
+        height: auto;
+    }
+
+    .rounded-image img:hover {
+        transform: scale(1.05);
+        box-shadow: var(--shadow-md);
+    }
+
+    .accordion {
+        border-radius: var(--radius_size) !important;
+        box-shadow: var(--shadow-sm) !important;
+        background: var(--background-fill-primary) !important;
+        margin: 1rem 0;
+        transition: box-shadow 0.3s ease, transform 0.3s ease;
+    }
+
+    .accordion:hover {
+        box-shadow: var(--shadow-md) !important;
+        transform: translateY(-2px);
+    }
+
+    .fade-in {
+        animation: fadeIn 0.8s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 768px) {
+        .gradio-container {
+            padding: 1.5rem;
+        }
+        .gradio-row > div {
+            flex: 1 1 100% !important;
+            margin-bottom: 1.25rem;
+        }
+        .hero-section {
+            padding: 3rem 1.5rem;
+        }
+        h1 { font-size: 1.75rem; }
+        h2 { font-size: 1.5rem; }
+        h3 { font-size: 1.15rem; }
+        .primary-button, .secondary-button {
+            padding: 0.75rem 1.5rem;
+            font-size: 0.95rem;
+        }
+    }
+
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --background-fill-primary: #1f2937; /* Darker background for dark mode */
+            --neutral-200: #d1d5db; /* Light gray for text */
+            --neutral-300: #9ca3af; /* Slightly darker for accents */
+        }
+        .gradio-container {
+            background: linear-gradient(135deg, var(--neutral-900), var(--neutral-800));
+            color: var(--neutral-200);
+        }
+        p, li {
+            color: var(--neutral-200);
+        }
+        .card, .accordion {
+            background: var(--neutral-800) !important;
+            box-shadow: var(--shadow-md);
+        }
+        .card:hover, .accordion:hover {
+            box-shadow: 0 12px 28px rgba(0,0,0,0.4);
+        }
+        .hero-section {
+            background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)),
+                        url('https://images.unsplash.com/photo-1548287053-99cb39e360cd?q=80&w=1600&auto=format&fit=crop') no-repeat center;
+            background-size: cover;
+        }
+    }
+    """
+) as demo:
+    gr.Markdown("""
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+    """)
+    
     with gr.Tab("Home"):
         gr.Markdown("""
-        <h2 style="color: var(--color-primary-600); text-align:center;">Welcome to the Change Detection Dashboard</h2>
-        <p style="font-size:16px; color: var(--color-text-secondary); text-align:center; max-width:800px; margin:0 auto;">
-            Unlock powerful insights into environmental and urban transformations with our state-of-the-art change detection system.
-            Powered by deep learning, this dashboard enables precise analysis of satellite imagery to detect land cover changes over time.
-        </p>
-        """)
-        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>Overview</h3>")
+        <div class="hero-section">
+            <h1 style="font-size: 2.5rem; margin-bottom: 1rem;">Change Detection System</h1>
+            <p style="font-size: 1.25rem; max-width: 800px; margin: 0 auto;">
+                Powerful tools for monitoring land cover changes over time using satellite imagery. Suitable for environmental studies, urban planning, and disaster assessment..
+            </p>
+        </div>
+        """, elem_classes=["fade-in"])
+
+        gr.Markdown("<h2>Overview</h2>", elem_classes=["fade-in"])
         gr.Markdown("""
-        <p style="font-size:15px; color: var(--color-text-secondary); line-height:1.6;">
-            Change detection in remote sensing is crucial for monitoring environmental changes, urban development, disaster response, and more.
-            Our dashboard uses multispectral satellite data (RGB + NIR bands) to identify differences between two time periods with high accuracy.
-            <br><br>
-            Whether you're an environmental scientist, urban planner, or researcher, this tool provides actionable insights through visualizations, statistics, and geospatial exports.
-        </p>
-        """)
-        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>Key Features</h3>")
-        with gr.Row(variant="panel"):
-            for emoji, title, desc in [
-                ("📊", "Rich Visualizations", "Interactive heatmaps, overlays, binary masks, and statistical charts with legends."),
-                ("💾", "Geospatial Exports", "Download results as GeoTIFF, GeoJSON, PNG, with preserved georeferencing."),
-                ("🧭", "Intuitive Interface", "Tab-based navigation for seamless workflow from upload to analysis.")
-            ]:
-                with gr.Column(scale=1):
-                    gr.Markdown(f"""
-                    <div style="
-                        background-color: var(--color-background-secondary);
-                        border-radius:8px;
-                        padding:15px;
-                        height:100%;
-                        text-align:center;">
-                        <h4 style="color: var(--color-primary-600);">{emoji} {title}</h4>
-                        <p style="color: var(--color-text-secondary); font-size:14px;">{desc}</p>
-                    </div>
-                    """)
-        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>How It Works</h3>")
-        gr.Markdown("""
-        <p style="font-size:15px; color: var(--color-text-secondary); line-height:1.6;">
-            The dashboard processes two GeoTIFF images from different time periods:
-            <ul style="list-style-type:disc; margin-left:20px; font-size:14px;">
-                <li><strong>Input Validation:</strong> Ensures images have matching dimensions and at least 4 bands (RGB + NIR).</li>
-                <li><strong>Patch-Based Processing:</strong> Divides large images into 256x256 patches for efficient prediction.</li>
-                <li><strong>Model Inference:</strong> Uses ChangeFormer to compute feature differences and generate change masks.</li>
-                <li><strong>Output Generation:</strong> Stitches results, creates visualizations, computes stats, and prepares exports.</li>
-            </ul>
-            The model is optimized for performance on CPU/GPU and handles large-scale imagery effectively.
-        </p>
-        """)
-        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>How to Use</h3>")
-        with gr.Row(variant="panel"):
-            steps = [
-                ("1️⃣ Upload Images", "Select GeoTIFF files for Year 1 and Year 2 in the Upload tab."),
-                ("2️⃣ Configure Parameters", "Adjust threshold and opacity for customized detection."),
-                ("3️⃣ Run Analysis", "Click 'Run Change Detection' and explore results across tabs."),
-                ("4️⃣ Export & Explore", "Download files or interact with maps for deeper insights.")
+        <div class="card">
+            <p>
+                Our Land Change Detection System uses state-of-the-art deep learning to analyze multispectral satellite imagery, identifying changes in land cover over time. Designed for researchers, environmental scientists, and urban planners, this tool provides detailed visualizations, geospatial data exports, and actionable insights for monitoring environmental and urban transformations.
+            </p>
+        </div>
+        """, elem_classes=["fade-in"])
+
+        gr.Markdown("<h2>Key Features</h2>", elem_classes=["fade-in"])
+        with gr.Row(variant="panel", equal_height=True):
+            features = [
+                ("chart-line", "Advanced Visualizations", "Interactive heatmaps, overlay maps, and statistical charts with clear, professional-grade legends."),
+                ("download", "Geospatial Outputs", "Export results as GeoTIFF, GeoJSON, or PNG files with full georeferencing for GIS integration."),
+                ("compass", "User-Friendly Interface", "Streamlined tab-based workflow for seamless navigation and analysis.")
             ]
-            for step, desc in steps:
-                with gr.Column(scale=1):
+            for icon, title, desc in features:
+                with gr.Column():
                     gr.Markdown(f"""
-                    <div style="
-                        background-color: var(--color-background-secondary);
-                        border-radius:8px;
-                        padding:15px;
-                        height:100%;
-                        text-align:center;">
-                        <h4 style="color: var(--color-primary-600);">{step}</h4>
-                        <p style="color: var(--color-text-secondary); font-size:14px;">{desc}</p>
+                    <div class="card fade-in">
+                        <i class="fas fa-{icon} fa-2x" style="color: var(--secondary-600); margin-bottom: 0.5rem;"></i>
+                        <h3 style="font-size: 1.25rem;">{title}</h3>
+                        <p>{desc}</p>
                     </div>
                     """)
-        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>Example Outputs</h3>")
-        with gr.Row():
-            satellite_url = validate_image_url("https://placehold.co/400x300/png?text=Satellite+Imagery+Example&font=roboto")
-            detection_url = validate_image_url("https://placehold.co/400x300/png?text=Change+Detection+Output&font=roboto")
-            gr.Image(value=satellite_url if satellite_url else None,
-                     label="Example Satellite Imagery",
-                     interactive=False,
-                     show_download_button=False,
-                     height=300)
-            gr.Image(value=detection_url if detection_url else None,
-                     label="Example Change Detection Output",
-                     interactive=False,
-                     show_download_button=False,
-                     height=300)
-        gr.Markdown("<h3 style='color: var(--color-primary-600); margin-top:30px;'>Benefits</h3>")
+
+        with gr.Accordion("How It Works", open=False, elem_classes=["accordion"]):
+            gr.Markdown("""
+            <div class="card">
+                <p>
+                    This system processes two GeoTIFF images to detect changes:
+                    <ul style="list-style-type: disc; margin-left: 1.5rem; margin-top: 0.5rem;">
+                        <li><strong>Input Validation:</strong> Ensures images have 4+ bands (RGB+NIR) and matching dimensions.</li>
+                        <li><strong>Patch Processing:</strong> Analyzes images in 256x256 patches for efficiency.</li>
+                        <li><strong>AI Inference:</strong> Uses the ChangeFormer model to detect differences.</li>
+                        <li><strong>Output Generation:</strong> Produces stitched masks, visualizations, and exportable geospatial data.</li>
+                    </ul>
+                </p>
+            </div>
+            """, elem_classes=["fade-in"])
+
+        gr.Markdown("<h2>How to Use</h2>", elem_classes=["fade-in"])
+        with gr.Row(variant="panel", equal_height=True):
+            steps = [
+                ("1", "Upload Images", "Upload two GeoTIFF files in the Upload tab."),
+                ("2", "Set Parameters", "Adjust threshold and opacity settings for tailored results."),
+                ("3", "Run Analysis", "Initiate change detection to generate outputs."),
+                ("4", "Review & Export", "Explore results and download data for further analysis.")
+            ]
+            for number, title, desc in steps:
+                with gr.Column():
+                    gr.Markdown(f"""
+                    <div class="card fade-in">
+                        <h3 style="font-size: 1.25rem;"><span style="color: var(--secondary-600);">{number}.</span> {title}</h3>
+                        <p>{desc}</p>
+                    </div>
+                    """)
+
+        # gr.Markdown("<h2>Example Outputs</h2>", elem_classes=["fade-in"])
+        # with gr.Row():
+        #     satellite_url = validate_image_url("https://images.unsplash.com/photo-1451187580459-4349027a8d3c?q=80&w=400&auto=format&fit=crop")
+        #     detection_url = validate_image_url("https://images.unsplash.com/photo-1504192010706-8ed0819fb50c?q=80&w=400&auto=format&fit=crop")
+        #     gr.Image(value=satellite_url, label="Sample Satellite Imagery", interactive=False, show_download_button=False, height=250, elem_classes=["rounded-image"])
+        #     gr.Image(value=detection_url, label="Sample Change Detection", interactive=False, show_download_button=False, height=250, elem_classes=["rounded-image"])
+
+        with gr.Accordion("Applications", open=False, elem_classes=["accordion"]):
+            gr.Markdown("""
+            <div class="card">
+                <ul style="list-style-type: disc; margin-left: 1.5rem; margin-top: 0.5rem;">
+                    <li><strong>Environmental Monitoring:</strong> Track deforestation, wetland changes, and climate impacts.</li>
+                    <li><strong>Urban Planning:</strong> Monitor infrastructure and urban expansion.</li>
+                    <li><strong>Agriculture:</strong> Analyze crop health and land use changes.</li>
+                    <li><strong>Research:</strong> Generate data for scientific studies and policy decisions.</li>
+                </ul>
+            </div>
+            """, elem_classes=["fade-in"])
+
         gr.Markdown("""
-        <ul style="list-style-type:disc; margin-left:20px; font-size:14px; color: var(--color-text-secondary);">
-            <li><strong>Environmental Monitoring:</strong> Track deforestation, wetland loss, or climate impacts.</li>
-            <li><strong>Urban Planning:</strong> Detect infrastructure changes and urban sprawl.</li>
-            <li><strong>Disaster Management:</strong> Assess damage from floods, fires, or earthquakes.</li>
-            <li><strong>Agriculture:</strong> Monitor crop health and land use changes.</li>
-            <li><strong>Research & Policy:</strong> Generate data for scientific studies and informed decision-making.</li>
-        </ul>
-        """)
-        gr.Markdown("""
-        <hr style="border-top: 2px solid var(--color-primary-100); margin:30px 0;">
-        <h3 style="color: var(--color-primary-600); text-align:center;">Ready to Detect Changes?</h3>
-        <p style="font-size:16px; color: var(--color-text-secondary); text-align:center;">Switch to the <strong>Upload</strong> tab to start your analysis today.</p>
-        """)
+        <hr style="border-top: 2px solid var(--neutral-300); margin: 2rem 0;">
+        <div style="text-align: center;">
+            <h2>Begin Your Analysis</h2>
+            <p style="font-size: 1.1rem; margin-bottom: 1rem;">
+                Navigate to the <strong>Upload</strong> tab to start analyzing your satellite imagery.
+            </p>
+             
+        </div>
+        """, elem_classes=["fade-in"])
 
     with gr.Tab("Upload"):
-        gr.Markdown("Upload two GeoTIFF images with at least 4 bands (RGB+NIR) for analysis. Only the first 4 bands (Red, Green, Blue, Near-Infrared) will be used.")
+        gr.Markdown("""
+        <div class="card fade-in">
+            <h2>Upload Satellite Imagery</h2>
+            <p>Upload two GeoTIFF images with at least 4 bands (RGB + NIR) for change detection analysis.</p>
+        </div>
+        """)
         with gr.Row():
-            file1 = gr.File(label="Image from Year 1 (.tif)", file_types=[".tif"])
-            file2 = gr.File(label="Image from Year 2 (.tif)", file_types=[".tif"])
+            file1 = gr.File(label="Year 1 Image (.tif)", file_types=[".tif"], elem_classes=["fade-in"])
+            file2 = gr.File(label="Year 2 Image (.tif)", file_types=[".tif"], elem_classes=["fade-in"])
         with gr.Row():
-            threshold = gr.Slider(0, 1, value=DEFAULT_THRESHOLD, label="Change Threshold", info="Higher values detect stricter changes.")
-            alpha = gr.Slider(0, 1, value=DEFAULT_ALPHA, label="Overlay Opacity", info="Controls transparency of change overlay.")
+            threshold = gr.Slider(0, 1, value=DEFAULT_THRESHOLD, label="Change Detection Threshold", info="Adjust to control sensitivity of change detection.", elem_classes=["fade-in"])
+            alpha = gr.Slider(0, 1, value=DEFAULT_ALPHA, label="Overlay Opacity", info="Adjust transparency of the change overlay.", elem_classes=["fade-in"])
         with gr.Row():
-            run_btn = gr.Button("Run Change Detection", variant="primary")
-            clear_btn = gr.Button("Clear Inputs", variant="secondary")
-        status = gr.Textbox(label="Status", interactive=False)
+            run_btn = gr.Button("Run Analysis", variant="primary", elem_classes=["primary-button"])
+            clear_btn = gr.Button("Clear Inputs", variant="secondary", elem_classes=["secondary-button"])
+        status = gr.Textbox(label="Status", interactive=False, elem_classes=["fade-in"])
 
-    with gr.Tab("Analysis"):
-        gr.Markdown("### Visualization of Change Detection Results")
-        gr.Markdown("Note: Overlay and mask images include legends on the right, which extend the image width. Zoom in or download for full clarity.")
+    with gr.Tab("Results"):
+        gr.Markdown("""
+        <div class="card fade-in">
+            <h2>Analysis Results</h2>
+            <p>View the processed images, change detection outputs, and heatmap. Legends are included in overlay and mask images.</p>
+        </div>
+        """)
         with gr.Row(equal_height=False):
-            out_year1 = gr.Image(label="Raw RGB (Year 1)", interactive=False, show_download_button=True, scale=1)
-            out_year2 = gr.Image(label="Raw RGB (Year 2)", interactive=False, show_download_button=True, scale=1)
+            out_year1 = gr.Image(label="Year 1 RGB Image", interactive=False, show_download_button=True, elem_classes=["rounded-image"])
+            out_year2 = gr.Image(label="Year 2 RGB Image", interactive=False, show_download_button=True, elem_classes=["rounded-image"])
         with gr.Row(equal_height=False):
-            out_overlay = gr.Image(label="Overlay with Prediction", interactive=False, show_download_button=True, scale=1)
-            out_mask = gr.Image(label="Binary Change Mask", interactive=False, show_download_button=True, scale=1)
+            out_overlay = gr.Image(label="Change Overlay", interactive=False, show_download_button=True, elem_classes=["rounded-image"])
+            out_mask = gr.Image(label="Binary Change Mask", interactive=False, show_download_button=True, elem_classes=["rounded-image"])
         with gr.Row(equal_height=False):
-            out_heatmap = gr.Image(label="Change Heatmap (static)", interactive=False, show_download_button=True, scale=1)
-        out_comment = gr.Textbox(label="System Comment", interactive=False)
+            out_heatmap = gr.Image(label="Static Change Heatmap", interactive=False, show_download_button=True, elem_classes=["rounded-image"])
+        out_comment = gr.Textbox(label="Analysis Summary", interactive=False, elem_classes=["fade-in"])
 
-    with gr.Tab("Stats"):
-        stats_out = gr.JSON(label="Change Statistics")
-        stats_plot = gr.Plot(label="Statistics Plot")
+    with gr.Tab("Statistics"):
+        gr.Markdown("""
+        <div class="card fade-in">
+            <h2>Change Statistics</h2>
+            <p>Detailed metrics on detected changes, including pixel counts and estimated area.</p>
+        </div>
+        """)
+        stats_out = gr.JSON(label="Statistics", elem_classes=["fade-in"])
+        stats_plot = gr.Plot(label="Change Distribution", elem_classes=["fade-in"])
 
     with gr.Tab("Downloads"):
-        dl_overlay = gr.File(label="Download Overlay with Legend", interactive=False)
-        dl_mask = gr.File(label="Download Mask with Legend", interactive=False)
-        dl_geotiff = gr.File(label="Download GeoTIFF Mask", interactive=False)
-        dl_geojson = gr.File(label="Download Change Polygons (GeoJSON)", interactive=False)
+        gr.Markdown("""
+        <div class="card fade-in">
+            <h2>Download Results</h2>
+            <p>Export your analysis results in various formats for further use.</p>
+        </div>
+        """)
+        dl_overlay = gr.File(label="Overlay Image (PNG)", interactive=False, elem_classes=["fade-in"])
+        dl_mask = gr.File(label="Binary Mask (PNG)", interactive=False, elem_classes=["fade-in"])
+        dl_geotiff = gr.File(label="GeoTIFF Mask", interactive=False, elem_classes=["fade-in"])
+        dl_geojson = gr.File(label="GeoJSON Polygons", interactive=False, elem_classes=["fade-in"])
 
-    with gr.Tab("Interactive Heatmap"):
-        heatmap_out = gr.HTML(label="Dynamic Change Intensity Heatmap")
+    with gr.Tab("Interactive Map"):
+        gr.Markdown("""
+        <div class="card fade-in">
+            <h2>Interactive Change Heatmap</h2>
+            <p>Explore a dynamic map highlighting areas of change intensity.</p>
+        </div>
+        """)
+        heatmap_out = gr.HTML(label="Interactive Heatmap", elem_classes=["fade-in"])
 
     run_btn.click(
         fn=predict_change,
@@ -694,4 +958,4 @@ with gr.Blocks(title="Change Detection Dashboard", theme=gr.themes.Soft()) as de
         outputs=[file1, file2, threshold, alpha, status]
     )
 
-demo.launch(debug=True)
+demo.launch()
